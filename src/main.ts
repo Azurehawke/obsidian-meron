@@ -57,27 +57,54 @@ function readUntil(
   });
 }
 
+/**
+ * Checks the server certificate. With a pinned fingerprint, only that certificate
+ * is accepted. Without one, the certificate must be trusted by the system; if it
+ * is not (for example self-signed), the error shows its fingerprint so the user
+ * can check it and pin it.
+ */
+function verifyCertificate(
+  socket: tls.TLSSocket,
+  pinnedFingerprint: string,
+): void {
+  const seen = socket.getPeerCertificate().fingerprint256 ?? "";
+  if (pinnedFingerprint !== "") {
+    if (seen.toUpperCase() !== pinnedFingerprint.toUpperCase()) {
+      throw new Error(`The server certificate does not match the pinned fingerprint (server sent ${seen}).`);
+    }
+    return;
+  }
+  if (!socket.authorized) {
+    throw new Error(
+      `The server certificate is not trusted (${socket.authorizationError}). ` +
+        `Its SHA-256 fingerprint is ${seen}. If this is your server, paste that into ` +
+        `"Pinned certificate SHA-256" in the settings and test again.`,
+    );
+  }
+}
+
 function connectTls(
   host: string,
   port: number,
   pinnedFingerprint: string,
 ): Promise<tls.TLSSocket> {
   return new Promise((resolve, reject) => {
+    // Always complete the handshake and decide in verifyCertificate, so the
+    // fingerprint can be shown. Nothing is sent before that check passes.
     const socket = tls.connect({
       host,
       port,
       servername: net.isIP(host) ? undefined : host,
-      rejectUnauthorized: pinnedFingerprint === "",
+      rejectUnauthorized: false,
     });
     socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error("Connection timed out")));
     socket.once("secureConnect", () => {
-      if (pinnedFingerprint !== "") {
-        const seen = socket.getPeerCertificate().fingerprint256 ?? "";
-        if (seen.toUpperCase() !== pinnedFingerprint.toUpperCase()) {
-          socket.destroy();
-          reject(new Error("The server certificate does not match the pinned fingerprint"));
-          return;
-        }
+      try {
+        verifyCertificate(socket, pinnedFingerprint);
+      } catch (err) {
+        socket.destroy();
+        reject(err);
+        return;
       }
       socket.setTimeout(0);
       resolve(socket);
@@ -156,16 +183,15 @@ function upgradeToTls(
     const secure = tls.connect({
       socket,
       servername: net.isIP(host) ? undefined : host,
-      rejectUnauthorized: pinnedFingerprint === "",
+      rejectUnauthorized: false,
     });
     secure.once("secureConnect", () => {
-      if (pinnedFingerprint !== "") {
-        const seen = secure.getPeerCertificate().fingerprint256 ?? "";
-        if (seen.toUpperCase() !== pinnedFingerprint.toUpperCase()) {
-          secure.destroy();
-          reject(new Error("The server certificate does not match the pinned fingerprint"));
-          return;
-        }
+      try {
+        verifyCertificate(secure, pinnedFingerprint);
+      } catch (err) {
+        secure.destroy();
+        reject(err);
+        return;
       }
       resolve(secure);
     });
@@ -214,13 +240,13 @@ export default class MeronMailPlugin extends Plugin {
     try {
       new Notice(await checkImap(s), 8000);
     } catch (err) {
-      new Notice(`IMAP: ${errorText(err)}`, 12000);
+      new Notice(`IMAP: ${errorText(err)}`, 30000);
       return;
     }
     try {
       new Notice(await checkSmtp(s), 8000);
     } catch (err) {
-      new Notice(`SMTP: ${errorText(err)}`, 12000);
+      new Notice(`SMTP: ${errorText(err)}`, 30000);
     }
   }
 
