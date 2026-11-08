@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-meron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Meron mail client as an Obsidian plugin",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "esbuild src/main.ts --bundle --platform=node --external:obsidian --external:electron --format=cjs --target=es2018 --outfile=main.js --watch --sourcemap=inline",
+    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --external:obsidian --external:electron --format=cjs --target=es2018 --outfile=main.js --minify"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "typescript": "^5.6.0"
+  }
+}

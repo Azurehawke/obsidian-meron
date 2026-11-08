@@ -1,0 +1,10 @@
+{
+  "id": "meron-mail",
+  "name": "Meron Mail",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Read and send mail from your IMAP/SMTP accounts inside Obsidian (desktop, first step toward the full Meron client).",
+  "author": "Steve",
+  "authorUrl": "https://github.com/Azurehawke",
+  "isDesktopOnly": true
+}
