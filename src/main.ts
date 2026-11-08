@@ -125,6 +125,26 @@ function connectPlain(host: string, port: number): Promise<net.Socket> {
   });
 }
 
+/** Connects with TLS and returns the server certificate's SHA-256 fingerprint, without sending anything. */
+export function fetchFingerprint(host: string, port: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({
+      host,
+      port,
+      servername: net.isIP(host) ? undefined : host,
+      rejectUnauthorized: false,
+    });
+    socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error("Connection timed out")));
+    socket.once("secureConnect", () => {
+      const fp = socket.getPeerCertificate().fingerprint256 ?? "";
+      socket.destroy();
+      if (fp === "") reject(new Error("The server sent no certificate."));
+      else resolve(fp);
+    });
+    socket.once("error", reject);
+  });
+}
+
 /** Logs in over IMAP on port 993 (implicit TLS) and logs out again. */
 export async function checkImap(s: MeronSettings): Promise<string> {
   const socket = await connectTls(s.imapHost, s.imapPort, s.pinnedFingerprint);
@@ -323,6 +343,25 @@ class MeronSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
+    new Setting(containerEl)
+      .setName("Pin the server's certificate")
+      .setDesc(
+        "Reads the certificate from the IMAP host and fills in the field below. " +
+          "Use it only when you know this address is your mail server.",
+      )
+      .addButton((b) =>
+        b.setButtonText("Fetch and pin").onClick(async () => {
+          try {
+            const fp = await fetchFingerprint(s.imapHost, s.imapPort);
+            s.pinnedFingerprint = fp;
+            await this.plugin.saveSettings();
+            new Notice("Certificate pinned.");
+            this.display();
+          } catch (err) {
+            new Notice(`Could not read the certificate: ${errorText(err)}`, 15000);
+          }
+        }),
+      );
     new Setting(containerEl)
       .setName("Pinned certificate SHA-256 (optional)")
       .setDesc("For a self-signed server certificate. Leave empty to require a trusted certificate.")

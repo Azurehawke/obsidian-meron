@@ -1,6 +1,6 @@
 {
   "name": "obsidian-meron",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Meron mail client as an Obsidian plugin",
   "license": "AGPL-3.0-only",
